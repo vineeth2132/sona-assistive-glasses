@@ -27,6 +27,15 @@ let shuttingDown = false
 let lastCaption = ''
 let lastStatus = ''
 
+// Phone-side log line that also reaches the Pi terminal (mirror.py logs
+// {"type":"log"} messages), since the phone console is not visible there.
+function debug(text: string) {
+  console.log(text)
+  if (socket?.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify({ type: 'log', text }))
+  }
+}
+
 // ==================================================
 // RADAR SETTINGS
 // ==================================================
@@ -464,6 +473,17 @@ let lastRenderedSector:
 let lastRenderedSound =
   ''
 
+// Last request accepted (rendered or still uploading). Frames arrive faster
+// than one upload takes, so comparing only against the *rendered* state let
+// every frame re-queue the same picture: a continuous upload loop that
+// starves the text containers on the same BLE link.
+let lastRequestedSector:
+  number | null =
+    null
+
+let lastRequestedSound =
+  ''
+
 async function renderLatestRadar() {
 
   if (
@@ -485,16 +505,10 @@ async function renderLatestRadar() {
       pendingRadar =
         null
 
-      console.log(
-        'RADAR SEND',
-        {
-          sector:
-            request.sector,
-
-          sound:
-            request.sound,
-        },
+      debug(
+        `RADAR SEND sector=${request.sector} sound=${request.sound || '-'}`,
       )
+      const t0 = Date.now()
 
       const bytes =
         await createRadarBitmap(
@@ -515,9 +529,8 @@ async function renderLatestRadar() {
           }),
         )
 
-      console.log(
-        'RADAR RESULT',
-        result,
+      debug(
+        `RADAR RESULT ${JSON.stringify(result)} after ${Date.now() - t0} ms`,
       )
 
       lastRenderedSector =
@@ -529,10 +542,16 @@ async function renderLatestRadar() {
   }
 
   catch (error) {
-    console.error(
-      'Radar rendering failed:',
-      error,
+    debug(
+      `RADAR FAILED ${String(error)}`,
     )
+
+    // Let the next frame re-request what is actually on screen.
+    lastRequestedSector =
+      lastRenderedSector
+
+    lastRequestedSound =
+      lastRenderedSound
   }
 
   finally {
@@ -563,17 +582,21 @@ function requestRadar(
       sound,
     )
 
-  // Already displaying this state.
+  // Already displayed, or already on its way to the glasses.
   if (
-    !bitmapBusy &&
-    !pendingRadar &&
     sector ===
-      lastRenderedSector &&
+      lastRequestedSector &&
     cleanSound ===
-      lastRenderedSound
+      lastRequestedSound
   ) {
     return
   }
+
+  lastRequestedSector =
+    sector
+
+  lastRequestedSound =
+    cleanSound
 
   // Latest request replaces older pending request.
   pendingRadar = {
@@ -825,10 +848,13 @@ function connectToPi() {
         // LIVE PARTIAL
         // ==================================================
 
-        if (
+        const hasPartial =
           typeof state.partial ===
             'string' &&
           state.partial.length > 0
+
+        if (
+          hasPartial
         ) {
           setCaption(
             `${state.partial}...`,
@@ -842,7 +868,11 @@ function connectToPi() {
         const history =
           state.history
 
+        // Only when nothing is being spoken right now; otherwise the
+        // live partial and the previous sentence would alternate frame
+        // by frame (the flicker seen on the glasses).
         if (
+          !hasPartial &&
           Array.isArray(
             history,
           ) &&
