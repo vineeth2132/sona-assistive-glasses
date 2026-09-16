@@ -8,7 +8,10 @@ import {
   OsEventTypeList,
 } from '@evenrealities/even_hub_sdk'
 
-const PI_WS = 'ws://10.183.65.133:8765/ws'
+// Override for laptop work: VITE_PI_WS=ws://localhost:8765/ws npm run dev
+const PI_WS =
+  import.meta.env.VITE_PI_WS ??
+  'ws://10.183.65.133:8765/ws'
 
 const bridge = await waitForEvenAppBridge()
 
@@ -341,221 +344,59 @@ async function createRadarBitmap(
   const cy =
     RADAR_H / 2
 
-  const radius = 52
+  // Ring geometry: one ring, the bearing dot just inside it,
+  // the sound label in the middle.
+  // (Design from sona_glasses/sona/display/renderer.py.)
+  const radius = 62
+  const dotR = 8
 
-  // ==================================================
-  // OUTER RING
-  // ==================================================
-
-  ctx.strokeStyle =
-    '#999999'
-
+  // RING
+  ctx.strokeStyle = '#ffffff'
   ctx.lineWidth = 2
-
   ctx.beginPath()
-
-  ctx.arc(
-    cx,
-    cy,
-    radius,
-    0,
-    Math.PI * 2,
-  )
-
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2)
   ctx.stroke()
 
-  // ==================================================
-  // INNER RING
-  // ==================================================
-
-  ctx.strokeStyle =
-    '#444444'
-
-  ctx.lineWidth = 1
-
+  // FRONT MARKER: small triangle inside the ring, pointing in
+  ctx.fillStyle = '#ffffff'
   ctx.beginPath()
-
-  ctx.arc(
-    cx,
-    cy,
-    35,
-    0,
-    Math.PI * 2,
-  )
-
-  ctx.stroke()
-
-  // ==================================================
-  // FRONT MARKER
-  // ==================================================
-
-  ctx.fillStyle =
-    '#ffffff'
-
-  ctx.beginPath()
-
-  ctx.moveTo(
-    cx,
-    cy - radius - 8,
-  )
-
-  ctx.lineTo(
-    cx - 5,
-    cy - radius + 2,
-  )
-
-  ctx.lineTo(
-    cx + 5,
-    cy - radius + 2,
-  )
-
+  ctx.moveTo(cx - 6, cy - radius + 1)
+  ctx.lineTo(cx + 6, cy - radius + 1)
+  ctx.lineTo(cx, cy - radius + 11)
   ctx.closePath()
-
   ctx.fill()
 
-  // ==================================================
-  // DIRECTION
-  //
-  // 0°   = front
-  // 90°  = right
-  // 180° = behind
-  // 270° = left
-  // ==================================================
-
-  if (
-    angle !== null &&
-    Number.isFinite(
-      angle,
-    )
-  ) {
-    const radians =
-      (
-        angle - 90
-      ) *
-      Math.PI /
-      180
-
-    // Direction arc
-    const arcWidth =
-      Math.PI / 9
-
-    ctx.strokeStyle =
-      '#ffffff'
-
-    ctx.lineWidth = 9
-
+  // BEARING DOT (0 deg = front / up, clockwise)
+  if (angle !== null && Number.isFinite(angle)) {
+    const a = (angle % 360) * Math.PI / 180
+    const rr = radius - dotR - 4
+    const x = cx + Math.sin(a) * rr
+    const y = cy - Math.cos(a) * rr
+    ctx.fillStyle = '#ffffff'
     ctx.beginPath()
-
-    ctx.arc(
-      cx,
-      cy,
-      radius,
-
-      radians -
-        arcWidth,
-
-      radians +
-        arcWidth,
-    )
-
-    ctx.stroke()
-
-    // Direction dot
-    const x =
-      cx +
-      Math.cos(
-        radians,
-      ) *
-      radius
-
-    const y =
-      cy +
-      Math.sin(
-        radians,
-      ) *
-      radius
-
-    ctx.fillStyle =
-      '#ffffff'
-
-    ctx.beginPath()
-
-    ctx.arc(
-      x,
-      y,
-      8,
-      0,
-      Math.PI * 2,
-    )
-
+    ctx.arc(x, y, dotR, 0, Math.PI * 2)
     ctx.fill()
   }
 
-  // ==================================================
-  // SOUND LABEL INSIDE CIRCLE
-  // ==================================================
-
-  const label =
-    cleanSoundLabel(
-      soundLabel,
-    )
+  // CENTRE: the sound label, or a small user dot
+  const label = cleanSoundLabel(soundLabel)
 
   if (label) {
-    // Black rectangle provides strong contrast.
-    ctx.fillStyle =
-      '#000000'
-
-    ctx.fillRect(
-      cx - 43,
-      cy - 18,
-      86,
-      36,
-    )
-
-    ctx.fillStyle =
-      '#ffffff'
-
-    ctx.textAlign =
-      'center'
-
-    ctx.textBaseline =
-      'middle'
-
-    if (
-      label.length <= 5
-    ) {
-      ctx.font =
-        'bold 25px sans-serif'
-    } else if (
-      label.length <= 7
-    ) {
-      ctx.font =
-        'bold 21px sans-serif'
+    ctx.fillStyle = '#ffffff'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    if (label.length <= 5) {
+      ctx.font = 'bold 25px sans-serif'
+    } else if (label.length <= 7) {
+      ctx.font = 'bold 21px sans-serif'
     } else {
-      ctx.font =
-        'bold 17px sans-serif'
+      ctx.font = 'bold 17px sans-serif'
     }
-
-    ctx.fillText(
-      label,
-      cx,
-      cy,
-    )
+    ctx.fillText(label, cx, cy)
   } else {
-    // User position / listening centre
-    ctx.fillStyle =
-      '#ffffff'
-
+    ctx.fillStyle = '#ffffff'
     ctx.beginPath()
-
-    ctx.arc(
-      cx,
-      cy,
-      4,
-      0,
-      Math.PI * 2,
-    )
-
+    ctx.arc(cx, cy, 4, 0, Math.PI * 2)
     ctx.fill()
   }
 
@@ -1070,20 +911,10 @@ function connectToPi() {
         )
 
         // ==================================================
-        // TEMPORARY DEBUG STATUS
-        //
-        // Keep this until the centre label is confirmed.
+        // STATUS LINE
         // ==================================================
 
         if (
-          heldSound
-        ) {
-          setStatus(
-            `DETECTED: ${heldSound}`,
-          )
-        }
-
-        else if (
           state.doa_active ===
             true
         ) {
