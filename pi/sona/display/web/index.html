@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sona Mirror</title>
+<style>
+  :root { --green:#5eff9e; --red:#ff4d4d; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#07100b; color:#cfe9d9; font:14px/1.45 -apple-system, "Segoe UI", sans-serif;
+         display:flex; flex-direction:column; align-items:center; gap:16px; padding:22px; min-height:100vh; }
+  h1 { font-size:15px; letter-spacing:.35em; color:var(--green); font-weight:600; margin:0; }
+  h1 small { color:#6fa385; letter-spacing:.1em; }
+  #glass { border:1px solid #1f4630; border-radius:14px; padding:18px 22px; background:#050d08;
+           box-shadow:0 0 42px rgba(94,255,158,.14), inset 0 0 22px rgba(94,255,158,.05); }
+  #frame { display:block; width:1152px; max-width:88vw; image-rendering:pixelated; }
+  #status { font-size:12px; color:#6fa385; }
+  #modebar { display:flex; gap:10px; align-items:center; }
+  #modebar .label { font-size:11px; letter-spacing:.22em; color:#7db895; margin-right:6px; }
+  #modebar button { padding:10px 20px; font-size:13px; letter-spacing:.12em; border-color:#2c5f42; }
+  #modebar button.on { background:var(--red); border-color:var(--red); color:#fff; font-weight:700;
+                       box-shadow:0 0 18px rgba(255,77,77,.45); }
+  #cone { display:flex; gap:8px; align-items:center; font-size:12px; color:#7db895; }
+  #panel { display:flex; gap:22px; flex-wrap:wrap; justify-content:center; align-items:flex-start; }
+  .card { background:#0b1811; border:1px solid #1a3826; border-radius:12px; padding:14px 16px; }
+  .card h2 { margin:0 0 10px; font-size:11px; letter-spacing:.22em; color:#7db895; font-weight:600; }
+  button { background:#123122; color:var(--green); border:1px solid #245c3c; border-radius:8px;
+           padding:7px 12px; font:12px monospace; cursor:pointer; }
+  button:hover { background:#1a4530; }
+  button.on { background:var(--green); color:#06130b; font-weight:700; }
+  button:disabled { opacity:.35; cursor:default; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; }
+  input[type=text] { background:#08130c; border:1px solid #245c3c; color:#cfe9d9; border-radius:8px;
+           padding:7px 10px; font:12px monospace; width:240px; }
+  #sounds { display:flex; flex-direction:column; gap:6px; min-width:330px; max-width:380px; }
+  .snd { display:flex; align-items:center; gap:8px; font:12px monospace; }
+  .snd input { accent-color:var(--green); }
+  .snd .lbl { min-width:96px; font-weight:700; color:var(--green); }
+  .snd.off .lbl { color:#4f7a62; }
+  .snd .cls { flex:1; color:#6fa385; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .snd .rm { background:none; border:none; color:#6fa385; padding:0 4px; font-size:14px; }
+  .snd .rm:hover { color:var(--red); }
+  #log { min-width:340px; max-width:380px; max-height:230px; overflow-y:auto; font:12px monospace; color:#9fd8b6; }
+  #log div { padding:3px 0; border-bottom:1px dashed #14301f; }
+  #log .hidden { color:#4f7a62; }
+  #log .deg { display:inline-block; min-width:44px; color:#6fa385; }
+  #log .me { color:#e0b25a; margin-left:6px; font-size:11px; }
+  #log .own { color:#8a6a2a; font-style:italic; }
+</style>
+</head>
+<body>
+<h1>SONA <small>· glasses mirror</small></h1>
+<div id="glass"><img id="frame" alt="glasses display"></div>
+
+<div id="modebar"><span class="label">MODE</span>
+  <button data-mode="focus">FOCUS</button>
+  <button data-mode="surround">SURROUND</button>
+  <button data-mode="alerts">ALERTS ONLY</button>
+</div>
+<div id="cone">focus cone:
+  <button data-cone="40">40°</button><button data-cone="60">60°</button>
+  <button data-cone="90">90°</button><button data-cone="180">180°</button>
+</div>
+<div id="status">connecting…</div>
+
+<div id="panel">
+  <div class="card">
+    <h2>YOUR NAME</h2>
+    <input type="text" id="nameinput" placeholder="your name" autocomplete="off">
+    <div class="row" style="margin-top:10px"><button id="callname">📢 SOMEONE CALLS YOU</button></div>
+    <h2 style="margin-top:16px">SIMULATE CAPTION</h2>
+    <form id="sayform"><input type="text" id="saytext" placeholder="type text, press enter" autocomplete="off"></form>
+  </div>
+
+  <div class="card">
+    <h2>MY VOICE</h2>
+    <div id="voicestatus" style="font:12px monospace; color:#9fd8b6; min-width:250px">…</div>
+    <div class="row" style="margin-top:10px">
+      <button id="enroll">🎙 ENROLL MY VOICE</button>
+      <button id="forgetvoice">FORGET</button>
+    </div>
+    <label class="snd" style="margin-top:12px"><input type="checkbox" id="ignoreown"> <span>hide my own words</span></label>
+  </div>
+
+  <div class="card">
+    <h2>SOUNDS SHOWN ON THE GLASSES</h2>
+    <div id="sounds"></div>
+    <form id="addform" class="row" style="margin-top:10px">
+      <input type="text" id="addcls" list="yamnet" placeholder="add a YAMNet class…" autocomplete="off">
+      <datalist id="yamnet"></datalist>
+      <button type="submit">ADD</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>HEARD — bearing · shown / ⤫ hidden</h2>
+    <div id="log"></div>
+  </div>
+</div>
+
+<script>
+const PROTOCOL = 4;
+const frame = document.getElementById("frame");
+const statusEl = document.getElementById("status");
+const logEl = document.getElementById("log");
+const soundsEl = document.getElementById("sounds");
+const nameInput = document.getElementById("nameinput");
+let ws;
+
+function staleReload() {  // server speaks a newer protocol: fetch the fresh page (rate-limited)
+  const last = Number(sessionStorage.getItem("sona_reload") || 0);
+  if (Date.now() - last > 15000) { sessionStorage.setItem("sona_reload", Date.now()); location.reload(); }
+}
+
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => statusEl.textContent = "live";
+  ws.onclose = () => { statusEl.textContent = "disconnected — retrying…"; setTimeout(connect, 1500); };
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.version !== PROTOCOL) return staleReload();
+    if (msg.type === "init") {
+      document.getElementById("yamnet").innerHTML =
+        msg.classes.map(c => `<option value="${c.replace(/"/g, "&quot;")}">`).join("");
+      return;
+    }
+    frame.src = "data:image/png;base64," + msg.frame;
+    const st = msg.state;
+    const serverNames = (st.names || []).join(", ");
+    if (document.activeElement !== nameInput && nameInput.value !== serverNames) nameInput.value = serverNames;
+    statusEl.textContent = `mode: ${st.mode.toUpperCase()}` +
+      (st.mode === "focus" ? ` · cone ${Math.round(st.cone)}°` : "") +
+      ` · listening for: ${serverNames || "(no name)"}` +
+      (st.name_alert ? ` · 📢 ${st.name_alert} CALLED` : "") +
+      (st.sound ? ` · sound: ${st.sound}` : "") +
+      (st.angle != null ? ` · bearing ${Math.round(st.angle)}°` : "");
+    logEl.innerHTML = st.history.slice().reverse().map(h => {
+      const deg = h.angle == null ? "—" : Math.round(h.angle) + "°";
+      const me = h.me != null ? `<span class="me">me ${h.me.toFixed(2)}</span>` : "";
+      const cls = h.own ? "own" : (h.shown ? "" : "hidden");
+      return `<div class="${cls}"><span class="deg">${deg}</span>${h.shown ? "" : "⤫ "}${esc(h.text)}${me}</div>`;
+    }).join("");
+    renderVoice(msg.voice);
+    for (const b of document.querySelectorAll("[data-mode]")) b.classList.toggle("on", b.dataset.mode === st.mode);
+    for (const b of document.querySelectorAll("[data-cone]")) {
+      b.classList.toggle("on", Number(b.dataset.cone) === Math.round(st.cone));
+      b.disabled = st.mode !== "focus";
+    }
+    renderSounds(msg.sounds);
+  };
+}
+connect();
+const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+const send = (o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
+
+const voiceStatus = document.getElementById("voicestatus");
+const enrollBtn = document.getElementById("enroll");
+const ignoreOwn = document.getElementById("ignoreown");
+let voiceEnrolling = false;
+function renderVoice(v) {
+  if (!v) return;
+  voiceEnrolling = !!v.enrolling;
+  if (!v.available) voiceStatus.textContent = "unavailable — " + v.reason;
+  else if (v.enrolling) voiceStatus.textContent = `enrolling… ${v.progress_s.toFixed(0)} / ${v.target_s.toFixed(0)} s — speak naturally, nobody else talking`;
+  else if (v.enrolled) voiceStatus.textContent = `enrolled from ${v.profile_seconds.toFixed(0)} s of speech · threshold ${v.threshold}`;
+  else voiceStatus.textContent = "not enrolled";
+  enrollBtn.textContent = v.enrolling ? "⏹ CANCEL" : "🎙 ENROLL MY VOICE";
+  enrollBtn.disabled = !v.available;
+  if (document.activeElement !== ignoreOwn) ignoreOwn.checked = !!v.ignore;
+}
+enrollBtn.addEventListener("click", () => send({ type: voiceEnrolling ? "voice_cancel" : "voice_enroll" }));
+document.getElementById("forgetvoice").addEventListener("click", () => send({ type: "voice_forget" }));
+ignoreOwn.addEventListener("change", () => send({ type: "voice_ignore", enabled: ignoreOwn.checked }));
+
+let soundsKey = "";
+function renderSounds(list) {
+  const key = JSON.stringify(list);
+  if (key === soundsKey) return;  // don't rebuild while the user is clicking
+  soundsKey = key;
+  soundsEl.innerHTML = list.map(s => `
+    <label class="snd ${s.enabled ? "" : "off"}">
+      <input type="checkbox" data-label="${esc(s.label)}" ${s.enabled ? "checked" : ""}>
+      <span class="lbl">${esc(s.label)}</span>
+      <span class="cls" title="${esc(s.classes.join(", "))} · threshold ${s.threshold}">${esc(s.classes.join(", "))}</span>
+      <button class="rm" data-remove="${esc(s.label)}" title="remove">×</button>
+    </label>`).join("");
+  for (const cb of soundsEl.querySelectorAll("input[type=checkbox]"))
+    cb.addEventListener("change", () => send({ type: "sound_toggle", label: cb.dataset.label, enabled: cb.checked }));
+  for (const b of soundsEl.querySelectorAll("[data-remove]"))
+    b.addEventListener("click", (e) => { e.preventDefault(); send({ type: "sound_remove", label: b.dataset.remove }); });
+}
+document.getElementById("addform").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const inp = document.getElementById("addcls");
+  if (inp.value.trim()) send({ type: "sound_add", cls: inp.value.trim() });
+  inp.value = "";
+});
+
+for (const b of document.querySelectorAll("[data-mode]"))
+  b.addEventListener("click", () => send({ type: "mode", value: b.dataset.mode }));
+for (const b of document.querySelectorAll("[data-cone]"))
+  b.addEventListener("click", () => send({ type: "cone", value: Number(b.dataset.cone) }));
+
+let nameTimer;
+nameInput.addEventListener("input", () => {
+  clearTimeout(nameTimer);
+  nameTimer = setTimeout(() => send({ type: "name_set", value: nameInput.value.trim() }), 300);
+});
+document.getElementById("callname").addEventListener("click", () =>
+  send({ type: "name_call", name: nameInput.value.trim() || "Miquel" }));  // uses the typed name
+
+const sayText = document.getElementById("saytext");
+document.getElementById("sayform").addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (sayText.value.trim()) send({ type: "say", text: sayText.value.trim() });
+  sayText.value = "";
+});
+sayText.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); e.target.form.requestSubmit(); }
+});
+</script>
+</body>
+</html>

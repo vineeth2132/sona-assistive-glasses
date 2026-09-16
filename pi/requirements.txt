@@ -1,0 +1,14 @@
+# Sona runtime dependencies (Mac + Raspberry Pi).
+# The tflite runtime is installed separately (see pi/setup.sh):
+#   pip install ai-edge-litert   # Mac & Pi (preferred)
+#   pip install tflite-runtime   # Pi fallback
+aiohttp>=3.9
+numpy>=1.26
+sounddevice>=0.4.6
+soundfile>=0.12
+pillow>=10.0
+webrtcvad-wheels>=2.0.14
+pyserial>=3.5
+bleak>=0.22
+pyusb>=1.2
+sherpa-onnx>=1.10  # speaker embeddings for own-voice recognition

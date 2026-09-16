@@ -1,0 +1,54 @@
+# ============================================
+# Python / Raspberry Pi
+# ============================================
+
+pi/.venv/
+pi/venv/
+pi/**/__pycache__/
+pi/**/*.pyc
+pi/**/*.pyo
+pi/.pytest_cache/
+pi/.ruff_cache/
+
+# Runtime files
+pi/out/
+pi/logs/
+
+# Whisper builds / large models
+pi/sona_stt/whisper.cpp/build/
+pi/sona_stt/whisper.cpp/.cache/
+pi/sona_stt/whisper.cpp/models/ggml-*.bin
+
+# ============================================
+# G2 / Node
+# ============================================
+
+g2/node_modules/
+g2/dist/
+g2/.vite/
+
+# ============================================
+# Secrets / environment
+# ============================================
+
+.env
+.env.local
+.env.*.local
+
+# ============================================
+# Editor / OS
+# ============================================
+
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ============================================
+# Temporary files
+# ============================================
+
+*.log
+*.tmp
+*.swp
+*~

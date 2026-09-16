@@ -1,0 +1,14 @@
+[Unit]
+Description=Sona glasses runtime
+After=network.target bluetooth.target
+
+[Service]
+Type=simple
+User=sona
+WorkingDirectory=/home/sona/sona_glasses
+ExecStart=/home/sona/sona_glasses/.venv/bin/python -m sona.app --doa serial --g1
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

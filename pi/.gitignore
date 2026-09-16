@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+.ruff_cache/
+.DS_Store
+out/
+sona_stt/whisper.cpp/
+models/**/*.bin
+models/**/*.tflite
+models/**/*.gguf
+models/**/*.onnx
+pi/g1_addresses.json
+# Seeed's XVF3800 kit — fetched by scripts/fetch_xvf_kit.sh (their repo carries no license)
+firmware/xvf3800/*.bin
+firmware/xvf3800/dfu_guide.md
+firmware/xvf3800/doa_convention.jpg
+tools/xvf_host/

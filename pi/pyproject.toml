@@ -1,0 +1,14 @@
+[project]
+name = "sona"
+version = "0.1.0"
+description = "Sound-awareness AR glasses runtime for Deaf / Hard-of-Hearing users"
+requires-python = ">=3.11"
+
+# Lint/format with:  .venv/bin/ruff check sona scripts && .venv/bin/ruff format sona scripts
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["sona_stt", "models", "out", "firmware", "tools"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC"]
