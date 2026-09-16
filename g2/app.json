@@ -11,7 +11,8 @@
       "name": "network",
       "desc": "Connect to the Sona Raspberry Pi",
       "whitelist": [
-        "ws://10.183.65.133:8765"
+        "ws://10.183.65.133:8765",
+        "ws://10.183.121.182:8765"
       ]
     }
   ],
