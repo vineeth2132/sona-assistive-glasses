@@ -339,6 +339,16 @@ class MirrorServer:
                 )[:80],
             )
 
+        # ------------------------------------------
+        # Debug line from the phone app (g2/src/main.ts debug())
+        # ------------------------------------------
+
+        elif t == "log":
+            log.info(
+                "phone: %s",
+                str(data.get("text", ""))[:200],
+            )
+
         elif (
             t == "name_call"
             and data.get("name")
@@ -611,7 +621,9 @@ class MirrorServer:
 
             dead = []
 
-            for ws in (
+            # Snapshot: a client may disconnect (and remove itself from the
+            # set) while we await a send, which would crash the iteration.
+            for ws in list(
                 self.clients
             ):
                 try:
