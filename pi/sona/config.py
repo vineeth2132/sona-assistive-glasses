@@ -18,20 +18,22 @@ FRAME_SAMPLES = SAMPLE_RATE * FRAME_MS // 1000  # 480
 # --- VAD / utterance segmentation ---
 VAD_AGGRESSIVENESS = 3  # 0..3, higher = stricter speech detection (3: fewer noise triggers)
 VAD_TRIGGER_RATIO = 0.6  # voiced ratio in the window that opens an utterance
-VAD_TRIGGER_WINDOW_MS = 300
-VAD_END_SILENCE_MS = 450  # silence that closes an utterance
-UTTERANCE_MAX_S = 10.0
-UTTERANCE_MIN_S = 0.35
+VAD_TRIGGER_WINDOW_MS = 240
+VAD_END_SILENCE_MS = 250  # silence that closes an utterance
+UTTERANCE_MAX_S = 8.0
+UTTERANCE_MIN_S = 0.30
 
 # --- speech to text (whisper.cpp server) ---
 # small.en is markedly more robust to background noise; the M4 absorbs it easily.
 # On the Pi start from base.en and revisit after the benchmark (pi/NOTES.md step 4).
-STT_MODEL = "small.en" if sys.platform == "darwin" else "base.en"
+STT_MODEL =  "base.en"
 STT_LANGUAGE = "en"
 STT_PORT = 8178
-STT_PARTIALS = True  # transcribe in-progress speech for near-live captions
+STT_PARTIALS = False  # transcribe in-progress speech for near-live captions
 STT_PARTIAL_INTERVAL = 1.0  # s between partial passes
 STT_PARTIAL_MIN_S = 1.0  # don't bother below this much audio
+STT_NEAR_ONLY = True
+STT_MIN_DBFS = -32.0
 
 # Hallucination gate: YAMNet's live Speech score decides whether whisper's output
 # on a segment is trustworthy (whisper invents "Thanks for watching." etc. on noise).

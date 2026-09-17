@@ -13,7 +13,8 @@ import argparse
 import asyncio
 import logging
 import time
-
+import math
+import numpy as np
 import sounddevice as sd
 
 from . import config
@@ -25,78 +26,182 @@ from .display.renderer import Renderer
 from .doa.mock import MockDoa
 from .hub import Hub
 from .state import SoundEvent, UiState
-from .stt.engine import WhisperSTT
+from .stt.sherpa_stream import SherpaStreamingSTT
 from .summarize.llm import accept, refine
 from .voice.speaker import OwnVoice
 
 log = logging.getLogger("sona")
 
+def utterance_dbfs(pcm: np.ndarray) -> float:
+    """RMS loudness used ONLY to decide whether Whisper should run."""
+    if pcm is None or len(pcm) == 0:
+        return -120.0
 
-async def stt_worker(hub: Hub, state: UiState, stt: WhisperSTT, voice: OwnVoice):
-    """Finished utterances -> captions; in-progress speech -> partial captions."""
+    x = pcm.astype(np.float32)
+    rms = float(np.sqrt(np.mean(x * x)))
+
+    if rms < 1.0:
+        return -120.0
+
+    return 20.0 * math.log10(rms / 32768.0)
+
+async def stt_worker(
+    hub: Hub,
+    state: UiState,
+    stt: SherpaStreamingSTT,
+    voice: OwnVoice,
+):
+    """
+    Real-time streaming captions using Sherpa.
+
+    Environmental sound detection is completely separate
+    and remains untouched.
+    """
+
     seg = UtteranceSegmenter()
     q = hub.subscribe("frames", maxsize=512)
-    busy = asyncio.Lock()
-    last_partial = 0.0
 
-    async def partial_pass(pcm):
-        if busy.locked():  # never queue partials behind other work
-            return
-        async with busy:
-            text = refine(await stt.transcribe(pcm))
-        if text and seg.active:
-            hub.publish("partial", text)
+    last_partial = ""
+    utterance_started = False
 
     while True:
         frame = await q.get()
+
+        was_active = seg.active
+
         utt = seg.push(frame)
 
-        if utt is not None:
-            hub.publish("partial", "")
-            score = state.recent_speech()
-            if score is not None and score < config.SPEECH_GATE_MIN:
-                log.debug("dropped utterance, speech score %.2f", score)
+        # ==========================================
+        # SPEECH STARTED
+        # ==========================================
+        if seg.active and not was_active:
+
+            stt.start_utterance()
+            utterance_started = True
+            last_partial = ""
+
+            # Include the VAD preroll so we don't lose
+            # the first word.
+            initial_audio = seg.snapshot()
+
+            if initial_audio is not None:
+                text = stt.feed(initial_audio)
+
+                level = utterance_dbfs(initial_audio)
+
+                if (
+                    level >= config.STT_MIN_DBFS
+                    and text
+                ):
+                    hub.publish("partial", text)
+                    last_partial = text
+
+            continue
+
+        # ==========================================
+        # LIVE STREAMING
+        # ==========================================
+        if seg.active and utterance_started:
+
+            text = stt.feed(frame)
+
+            # Use the whole current utterance to estimate
+            # whether the speaker is actually near.
+            current = seg.snapshot()
+
+            if current is None:
                 continue
-            t_end = time.time()
-            t_start = t_end - len(utt) / config.SAMPLE_RATE
-            angle = state.direction_between(t_start, t_end)
-            sim = await asyncio.to_thread(voice.process, utt) if voice.available else None
-            if state.ignore_own_voice and sim is not None and sim >= config.OWN_VOICE_THRESHOLD:
-                log.info("own voice (similarity %.2f) — not transcribed", sim)
-                hub.publish(
-                    "transcript", {"text": "(own voice)", "angle": angle, "me": sim, "own": True}
-                )
-                continue
-            async with busy:
-                text = accept(refine(await stt.transcribe(utt)), score)
-            if text:
-                log.info(
-                    "heard (%.2fs stt, speech %.2f, %s%s): %s",
-                    time.time() - t_end,
-                    score if score is not None else -1,
-                    f"{angle:.0f}°" if angle is not None else "no bearing",
-                    f", me {sim:.2f}" if sim is not None else "",
-                    text,
-                )
-                hub.publish("transcript", {"text": text, "angle": angle, "me": sim})
-        elif (
-            config.STT_PARTIALS
-            and seg.active
-            and seg.duration_s >= config.STT_PARTIAL_MIN_S
-            and time.time() - last_partial >= config.STT_PARTIAL_INTERVAL
-            and not busy.locked()
-        ):
-            # live text only for speech this mode would caption (focus: inside the cone);
-            # when the talker leaves the cone, take the stale partial off the screen too
-            if not state.caption_allowed(state.recent_direction(config.FOCUS_PARTIAL_WINDOW_S)):
+
+            level = utterance_dbfs(current)
+
+            # Distant/background voice:
+            # decode can continue internally but DO NOT
+            # send captions to glasses.
+            if level < config.STT_MIN_DBFS:
                 if state.partial:
                     hub.publish("partial", "")
                 continue
-            pcm = seg.snapshot()
-            if pcm is not None:
-                last_partial = time.time()
-                asyncio.create_task(partial_pass(pcm))
 
+            if text and text != last_partial:
+
+                hub.publish("partial", text)
+
+                last_partial = text
+
+            continue
+
+        # ==========================================
+        # UTTERANCE FINISHED
+        # ==========================================
+        if utt is not None and utterance_started:
+
+            final_text = stt.finish()
+
+            utterance_started = False
+
+            hub.publish("partial", "")
+
+            level = utterance_dbfs(utt)
+
+            score = state.recent_speech()
+
+            log.info(
+                "STT candidate: level %.1f dBFS, speech %.2f",
+                level,
+                score if score is not None else -1,
+            )
+
+            # Near-voice filtering
+            if level < config.STT_MIN_DBFS:
+                log.info(
+                    "STT ignored distant/quiet speech (%.1f dBFS)",
+                    level,
+                )
+                continue
+
+            # Existing YAMNet speech confidence gate
+            if (
+                score is not None
+                and score < config.SPEECH_GATE_MIN
+            ):
+                log.info(
+                    "STT ignored low speech confidence %.2f",
+                    score,
+                )
+                continue
+
+            if not final_text:
+                continue
+
+            t_end = time.time()
+            t_start = (
+                t_end
+                - len(utt) / config.SAMPLE_RATE
+            )
+
+            angle = state.direction_between(
+                t_start,
+                t_end,
+            )
+
+            log.info(
+                "heard LIVE (speech %.2f, %.1f dBFS, %s): %s",
+                score if score is not None else -1,
+                level,
+                f"{angle:.0f}°"
+                if angle is not None
+                else "no bearing",
+                final_text,
+            )
+
+            hub.publish(
+                "transcript",
+                {
+                    "text": final_text,
+                    "angle": angle,
+                    "me": None,
+                },
+            )
 
 async def state_worker(hub: Hub, state: UiState):
     caption_q = hub.subscribe("caption")
@@ -336,9 +441,15 @@ async def main(argv=None):
     # speech to text
     stt = None
     if not args.no_stt:
-        stt = WhisperSTT(model=args.model)
-        await stt.start()
-        tasks.append(stt_worker(hub, state, stt, own_voice))
+        stt = SherpaStreamingSTT()
+        tasks.append(
+            stt_worker(
+                hub,
+                state,
+                stt,
+                own_voice,
+            )
+        )
 
     # sound classification
     if not args.no_sounds:
@@ -382,8 +493,7 @@ async def main(argv=None):
     try:
         await asyncio.gather(*tasks)
     finally:
-        if stt:
-            await stt.stop()
+        
         await g1.disconnect()
 
 
